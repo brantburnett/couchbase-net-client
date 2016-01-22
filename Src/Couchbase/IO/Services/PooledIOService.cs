@@ -262,7 +262,7 @@ namespace Couchbase.IO.Services
         {
             try
             {
-                var connection = _connectionPool.Acquire();
+                var connection = await _connectionPool.AcquireAsync();
                 if (!connection.IsAuthenticated)
                 {
                     lock (_syncObj)
@@ -301,7 +301,7 @@ namespace Couchbase.IO.Services
         {
             try
             {
-                var connection = _connectionPool.Acquire();
+                var connection = await _connectionPool.AcquireAsync();
                 if (!connection.IsAuthenticated)
                 {
                     lock (_syncObj)

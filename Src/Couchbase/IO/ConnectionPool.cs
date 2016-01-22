@@ -5,6 +5,7 @@ using System.Net;
 using System.Runtime.CompilerServices;
 using System.Runtime.Remoting.Channels;
 using System.Threading;
+using System.Threading.Tasks;
 using Common.Logging;
 using Couchbase.Configuration.Client;
 using Couchbase.Core;
@@ -20,7 +21,6 @@ namespace Couchbase.IO
         private static readonly ILog Log = LogManager.GetLogger<ConnectionPool<IConnection>>();
         private readonly ConcurrentQueue<T> _store = new ConcurrentQueue<T>();
         private readonly Func<ConnectionPool<T>, IByteConverter, BufferAllocator, T> _factory;
-        private readonly AutoResetEvent _autoResetEvent = new AutoResetEvent(false);
         private readonly PoolConfiguration _configuration;
         private readonly object _lock = new object();
         private readonly IByteConverter _converter;
@@ -31,6 +31,9 @@ namespace Couchbase.IO
         private int _acquireFailedCount;
         private readonly IServer _owner;
         private readonly BufferAllocator _bufferAllocator;
+
+        // List of requests waiting on a free connection
+        private readonly Queue<TaskCompletionSource<bool>> _pendingAcquires = new Queue<TaskCompletionSource<bool>>();
 
         public ConnectionPool(PoolConfiguration configuration, IPEndPoint endPoint)
             : this(configuration, endPoint, DefaultConnectionFactory.GetGeneric<T>(), new DefaultConverter())
@@ -135,6 +138,95 @@ namespace Couchbase.IO
         /// <exception cref="ConnectionUnavailableException">thrown if a thread waits more than the <see cref="PoolConfiguration.MaxAcquireIterationCount"/>.</exception>
         public T Acquire()
         {
+            TaskCompletionSource<bool> taskCompletionSource;
+
+            lock (_pendingAcquires)
+            {
+                var connection = AcquireInternal();
+                if (connection != null)
+                {
+                    return connection;
+                }
+
+                // Connection was not acquired
+
+                taskCompletionSource = new TaskCompletionSource<bool>();
+                _pendingAcquires.Enqueue(taskCompletionSource);
+            }
+
+            var wasSignaled = taskCompletionSource.Task.Wait(_configuration.WaitTimeout);
+
+            if (!wasSignaled)
+            {
+                // In case this was a timeout, go ahead and signal the task
+                // That way when the next connection is released this task is skipped and another is signaled
+
+                taskCompletionSource.TrySetResult(true);
+            }
+
+            var acquireFailedCount = Interlocked.Increment(ref _acquireFailedCount);
+            if (acquireFailedCount >= _configuration.MaxAcquireIterationCount)
+            {
+                Interlocked.Exchange(ref _acquireFailedCount, 0);
+                const string msg = "Failed to acquire a pooled client connection on {0} after {1} tries.";
+                throw new ConnectionUnavailableException(msg, EndPoint, acquireFailedCount);
+            }
+            return Acquire();
+        }
+
+        public async Task<IConnection> AcquireAsync()
+        {
+            TaskCompletionSource<bool> taskCompletionSource;
+
+            lock (_pendingAcquires)
+            {
+                // Try to acquire a connection synchronously first for speed
+                // But do this while pendingAcquires is locked so that a connection can't be released before this request is queued
+
+                var connection = AcquireInternal();
+                if (connection != null)
+                {
+                    return connection;
+                }
+
+                var acquireFailedCount = Interlocked.Increment(ref _acquireFailedCount);
+                if (acquireFailedCount >= _configuration.MaxAcquireIterationCount)
+                {
+                    Interlocked.Exchange(ref _acquireFailedCount, 0);
+                    const string msg = "Failed to asynchronously acquire a pooled client connection on {0} after {1} tries.";
+                    throw new ConnectionUnavailableException(msg, EndPoint, acquireFailedCount);
+                }
+
+                taskCompletionSource = new TaskCompletionSource<bool>();
+                _pendingAcquires.Enqueue(taskCompletionSource);
+            }
+
+            // Wait for the task to be signaled by a connection being released or the timeout being reached
+            var triggeringTask = await Task.WhenAny(
+                taskCompletionSource.Task,
+                Task.Delay(_configuration.WaitTimeout)
+            );
+
+            if (triggeringTask != taskCompletionSource.Task)
+            {
+                // In case this was a timeout, go ahead and signal the task
+                // That way when the next connection is released this task is skipped and another is signaled
+
+                taskCompletionSource.TrySetResult(true);
+            }
+
+            // Either a connection was released or the timeout was reached
+            // In either case, attempt to acquire again
+
+            return await AcquireAsync();
+        }
+
+        /// <summary>
+        /// Attempts to acquire an existing or new <see cref="IConnection"/>, if one is available.
+        /// </summary>
+        /// <returns>Returns an available <see cref="IConnection"/>, or null if no connection could be acquired.</returns>
+        private T AcquireInternal()
+        {
             T connection;
 
             if (_store.TryDequeue(out connection) && !_disposed)
@@ -165,15 +257,8 @@ namespace Couchbase.IO
                 }
             }
 
-            _autoResetEvent.WaitOne(_configuration.WaitTimeout);
-            var acquireFailedCount = Interlocked.Increment(ref _acquireFailedCount);
-            if (acquireFailedCount >= _configuration.MaxAcquireIterationCount)
-            {
-                Interlocked.Exchange(ref _acquireFailedCount, 0);
-                const string msg = "Failed to acquire a pooled client connection on {0} after {1} tries.";
-                throw new ConnectionUnavailableException(msg, EndPoint, acquireFailedCount);
-            }
-            return Acquire();
+            // Could not acquire a connection
+            return null;
         }
 
         /// <summary>
@@ -209,7 +294,20 @@ namespace Couchbase.IO
             {
                 _store.Enqueue(connection);
             }
-            _autoResetEvent.Set();
+
+            lock (_pendingAcquires)
+            {
+                while (_pendingAcquires.Count > 0)
+                {
+                    // Find the first task not already completed and signal it
+
+                    var taskCompletionSource = _pendingAcquires.Dequeue();
+                    if (taskCompletionSource.TrySetResult(true))
+                    {
+                        return;
+                    }
+                }
+            }
         }
 
         /// <summary>

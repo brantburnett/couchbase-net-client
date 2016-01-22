@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Net;
 using System.Runtime.Remoting.Channels;
+using System.Threading.Tasks;
 using Couchbase.Configuration.Client;
 using Couchbase.Core;
 
@@ -18,6 +19,13 @@ namespace Couchbase.IO
         /// </summary>
         /// <returns>A TCP <see cref="IConnection"/> object to a Couchbase Server.</returns>
         IConnection Acquire();
+
+        /// <summary>
+        /// Asynchronously returns a <see cref="IConnection"/> the pool, creating a new one if none are available
+        /// and the <see cref="PoolConfiguration.MaxSize"/> has not been reached.
+        /// </summary>
+        /// <returns>A TCP <see cref="IConnection"/> object to a Couchbase Server.</returns>
+        Task<IConnection> AcquireAsync();
 
         /// <summary>
         /// Releases an acquired <see cref="IConnection"/> object back into the pool so that it can be reused by another operation.

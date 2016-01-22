@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
+using System.Threading.Tasks;
 using Couchbase.Configuration.Client;
 using Couchbase.Core;
 using Couchbase.IO;
@@ -44,6 +45,11 @@ namespace Couchbase.Tests.Fakes
                 _connections.Add(new FakeConnection());
             }
             return _connections.First();
+        }
+
+        public Task<IConnection> AcquireAsync()
+        {
+            return Task.FromResult(Acquire());
         }
 
         public void Release(IConnection connection)
