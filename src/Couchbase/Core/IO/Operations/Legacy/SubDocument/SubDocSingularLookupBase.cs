@@ -1,3 +1,5 @@
+using System;
+
 namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 {
     internal abstract class SubDocSingularLookupBase<T> : SubDocSingularBase<T>
@@ -19,29 +21,33 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
         public override void WriteHeader(byte[] buffer)
         {
-            Converter.FromByte((byte)Magic.Request, buffer, HeaderOffsets.Magic);//0
-            Converter.FromByte((byte)OpCode, buffer, HeaderOffsets.Opcode);//1
-            Converter.FromInt16(KeyLength, buffer, HeaderOffsets.KeyLength);//2-3
-            Converter.FromByte((byte)ExtrasLength, buffer, HeaderOffsets.ExtrasLength);  //4
+            var span = buffer.AsSpan();
+
+            Converter.FromByte((byte)Magic.Request, span.Slice(HeaderOffsets.Magic));//0
+            Converter.FromByte((byte)OpCode, span.Slice(HeaderOffsets.Opcode));//1
+            Converter.FromInt16(KeyLength, span.Slice(HeaderOffsets.KeyLength));//2-3
+            Converter.FromByte((byte)ExtrasLength, span.Slice(HeaderOffsets.ExtrasLength));  //4
             //5 datatype?
             if (VBucketId.HasValue)
             {
-                Converter.FromInt16(VBucketId.Value, buffer, HeaderOffsets.VBucket);//6-7
+                Converter.FromInt16(VBucketId.Value, span.Slice(HeaderOffsets.VBucket));//6-7
             }
 
-            Converter.FromInt32(ExtrasLength + PathLength + KeyLength, buffer, HeaderOffsets.BodyLength);//8-11
-            Converter.FromUInt32(Opaque, buffer, HeaderOffsets.Opaque);//12-15
-            Converter.FromUInt64(Cas, buffer, HeaderOffsets.Cas);
+            Converter.FromInt32(ExtrasLength + PathLength + KeyLength, span.Slice(HeaderOffsets.BodyLength));//8-11
+            Converter.FromUInt32(Opaque, span.Slice(HeaderOffsets.Opaque));//12-15
+            Converter.FromUInt64(Cas, span.Slice(HeaderOffsets.Cas));
         }
 
         public override void WriteExtras(byte[] buffer, int offset)
         {
-            Converter.FromInt16(PathLength, buffer, offset); //1-2
-            Converter.FromByte((byte) CurrentSpec.PathFlags, buffer, offset + 2); //3
+            var span = buffer.AsSpan(offset);
+
+            Converter.FromInt16(PathLength, span); //1-2
+            Converter.FromByte((byte) CurrentSpec.PathFlags, span.Slice(2)); //3
 
             if (CurrentSpec.DocFlags != SubdocDocFlags.None)
             {
-                Converter.FromByte((byte) CurrentSpec.DocFlags, buffer, offset + 3);
+                Converter.FromByte((byte) CurrentSpec.DocFlags, span.Slice(3));
             }
         }
 

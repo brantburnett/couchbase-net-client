@@ -34,13 +34,13 @@ namespace Couchbase
             var operationSpecs = new List<OperationSpec>();
             for (;;)
             {
-                var bodyLength = _converter.ToInt32(response, valueLengthOffset);
+                var bodyLength = _converter.ToInt32(response.AsSpan(valueLengthOffset));
                 var payLoad = new byte[bodyLength];
                 Buffer.BlockCopy(response, valueOffset, payLoad, 0, bodyLength);
 
                 var command = new OperationSpec
                 {
-                    Status = (ResponseStatus) _converter.ToUInt16(response, statusOffset),
+                    Status = (ResponseStatus) _converter.ToUInt16(response.AsSpan(statusOffset)),
                     ValueIsJson = payLoad.IsJson(0, bodyLength - 1),
                     Bytes = payLoad
                 };

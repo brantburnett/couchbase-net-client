@@ -37,11 +37,12 @@ namespace Couchbase.Core.IO.Operations.Legacy.Authentication
             var header = new byte[OperationHeader.Length];
             var totalLength = key.GetLengthSafe() + body.GetLengthSafe();
 
-            Converter.FromByte((byte)Magic.Request, header, HeaderOffsets.Magic);
-            Converter.FromByte((byte)OpCode, header, HeaderOffsets.Opcode);
-            Converter.FromInt16((short)key.Length, header, HeaderOffsets.KeyLength);
-            Converter.FromInt32(totalLength, header, HeaderOffsets.BodyLength);
-            Converter.FromUInt32(Opaque, header, HeaderOffsets.Opaque);
+            var span = header.AsSpan();
+            Converter.FromByte((byte)Magic.Request, span.Slice(HeaderOffsets.Magic));
+            Converter.FromByte((byte)OpCode, span.Slice(HeaderOffsets.Opcode));
+            Converter.FromInt16((short)key.Length, span.Slice(HeaderOffsets.KeyLength));
+            Converter.FromInt32(totalLength, span.Slice(HeaderOffsets.BodyLength));
+            Converter.FromUInt32(Opaque, span.Slice(HeaderOffsets.Opaque));
 
             return header;
         }

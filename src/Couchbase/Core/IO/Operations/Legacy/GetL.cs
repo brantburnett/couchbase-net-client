@@ -1,3 +1,5 @@
+using System;
+
 namespace Couchbase.Core.IO.Operations.Legacy
 {
     internal class GetL<T> : Get<T>
@@ -5,7 +7,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
         public override byte[] CreateExtras()
         {
             var extras = new byte[4];
-            Converter.FromUInt32(Expiration, extras, 0);
+            Converter.FromUInt32(Expiration, extras.AsSpan());
             return extras;
         }
 

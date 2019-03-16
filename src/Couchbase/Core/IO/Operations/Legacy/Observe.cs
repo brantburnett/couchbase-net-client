@@ -6,23 +6,24 @@ namespace Couchbase.Core.IO.Operations.Legacy
     {
         public override byte[] Write()
         {
-            var key = CreateKey();
+            var key = CreateKey().AsSpan();
 
-            var body = new byte[4 + key.Length];
+            Span<byte> body = stackalloc byte[4 + key.Length];
             // ReSharper disable once PossibleInvalidOperationException
-            Converter.FromInt16(VBucketId.Value, body, 0);
-            Converter.FromInt16((short)key.Length, body, 2);
-            Buffer.BlockCopy(key, 0, body, 4, key.Length);
+            Converter.FromInt16(VBucketId.Value, body);
+            Converter.FromInt16((short)key.Length, body.Slice(2));
+            key.CopyTo(body.Slice(4, key.Length));
 
-            var header = new byte[OperationHeader.Length];
-            Converter.FromByte((byte)Magic.Request, header, HeaderOffsets.Magic);
-            Converter.FromByte((byte)OpCode, header, HeaderOffsets.Opcode);
-            Converter.FromInt32(body.Length, header, HeaderOffsets.BodyLength);
-            Converter.FromUInt32(Opaque, header, HeaderOffsets.Opaque);
+            Span<byte> header = stackalloc byte[OperationHeader.Length];
+            Converter.FromByte((byte)Magic.Request, header.Slice(HeaderOffsets.Magic));
+            Converter.FromByte((byte)OpCode, header.Slice(HeaderOffsets.Opcode));
+            Converter.FromInt32(body.Length, header.Slice(HeaderOffsets.BodyLength));
+            Converter.FromUInt32(Opaque, header.Slice(HeaderOffsets.Opaque));
 
             var buffer = new byte[body.Length + header.Length];
-            System.Buffer.BlockCopy(header, 0, buffer, 0, header.Length);
-            System.Buffer.BlockCopy(body, 0, buffer, header.Length, body.Length);
+            var bufferSpan = buffer.AsSpan();
+            header.CopyTo(bufferSpan);
+            body.CopyTo(bufferSpan.Slice(header.Length));
             return buffer;
         }
 
@@ -32,18 +33,18 @@ namespace Couchbase.Core.IO.Operations.Legacy
             {
                 try
                 {
-                    var buffer = Data.ToArray();
-                    var keylength = Converter.ToInt16(buffer, 26);
+                    var buffer = Data.ToArray().AsSpan();
+                    var keylength = Converter.ToInt16(buffer.Slice(26));
 
                     return new ObserveState
                     {
-                        PersistStat = Converter.ToUInt32(buffer, 16),
-                        ReplState = Converter.ToUInt32(buffer, 20),
-                        VBucket = Converter.ToInt16(buffer, 24),
+                        PersistStat = Converter.ToUInt32(buffer.Slice(16)),
+                        ReplState = Converter.ToUInt32(buffer.Slice(20)),
+                        VBucket = Converter.ToInt16(buffer.Slice(24)),
                         KeyLength = keylength,
-                        Key = Converter.ToString(buffer, 28, keylength),
-                        KeyState = (KeyState) Converter.ToByte(buffer, 28 + keylength),
-                        Cas = Converter.ToUInt64(buffer, 28 + keylength + 1)
+                        Key = Converter.ToString(buffer.Slice(28, keylength)),
+                        KeyState = (KeyState) Converter.ToByte(buffer.Slice(28 + keylength)),
+                        Cas = Converter.ToUInt64(buffer.Slice(28 + keylength + 1))
                     };
                 }
                 catch (Exception e)

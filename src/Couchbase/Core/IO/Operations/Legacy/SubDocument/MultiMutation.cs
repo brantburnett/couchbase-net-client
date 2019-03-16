@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using Couchbase.Core.IO.Operations.SubDocument;
 using Couchbase.Utils;
@@ -30,15 +31,15 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
         {
             if (DurabilityLevel == DurabilityLevel.None)
             {
-                return new byte[0];
+                return Array.Empty<byte>();
             }
 
             // TODO: omit timeout bytes if no timeout provided
             var bytes = new byte[2];
 
             var framingExtra = new FramingExtraInfo(RequestFramingExtraType.DurabilityRequirements, (byte) (bytes.Length - 1));
-            Converter.FromByte(framingExtra.Byte, bytes, 0);
-            Converter.FromByte((byte) DurabilityLevel, bytes, 1);
+            Converter.FromByte(framingExtra.Byte, bytes.AsSpan());
+            Converter.FromByte((byte) DurabilityLevel, bytes.AsSpan().Slice(1));
 
             // TODO: improve timeout, coerce to 1500ms, etc
             //var timeout = DurabilityTimeout.HasValue ? DurabilityTimeout.Value.TotalMilliseconds : 0;
@@ -49,34 +50,36 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
         public override void WriteHeader(byte[] buffer)
         {
+            var span = buffer.AsSpan();
+
             var keyBytes = CreateKey();
             var framingExtras = CreateFramingExtras();
 
             if (framingExtras.Length > 0)
             {
-                Converter.FromByte((byte) Magic.AltRequest, buffer, HeaderOffsets.Magic); //0
-                Converter.FromByte((byte) OpCode, buffer, HeaderOffsets.Opcode); //1
-                Converter.FromByte((byte) framingExtras.Length, buffer, HeaderOffsets.KeyLength); //2
-                Converter.FromByte((byte) keyBytes.Length, buffer, HeaderOffsets.AltKeyLength); //3
-                Converter.FromByte((byte) ExtrasLength, buffer, HeaderOffsets.ExtrasLength); //4
+                Converter.FromByte((byte) Magic.AltRequest, span.Slice(HeaderOffsets.Magic)); //0
+                Converter.FromByte((byte) OpCode, span.Slice(HeaderOffsets.Opcode)); //1
+                Converter.FromByte((byte) framingExtras.Length, span.Slice(HeaderOffsets.KeyLength)); //2
+                Converter.FromByte((byte) keyBytes.Length, span.Slice(HeaderOffsets.AltKeyLength)); //3
+                Converter.FromByte((byte) ExtrasLength, span.Slice(HeaderOffsets.ExtrasLength)); //4
             }
             else
             {
-                Converter.FromByte((byte) Magic.Request, buffer, HeaderOffsets.Magic); //0
-                Converter.FromByte((byte) OpCode, buffer, HeaderOffsets.Opcode); //1
-                Converter.FromInt16((short) keyBytes.Length, buffer, HeaderOffsets.KeyLength); //2-3
-                Converter.FromByte((byte) ExtrasLength, buffer, HeaderOffsets.ExtrasLength); //4
+                Converter.FromByte((byte) Magic.Request, span.Slice(HeaderOffsets.Magic)); //0
+                Converter.FromByte((byte) OpCode, span.Slice(HeaderOffsets.Opcode)); //1
+                Converter.FromInt16((short) keyBytes.Length, span.Slice(HeaderOffsets.KeyLength)); //2-3
+                Converter.FromByte((byte) ExtrasLength, span.Slice(HeaderOffsets.ExtrasLength)); //4
             }
 
             //5 datatype?
             if (VBucketId.HasValue)
             {
-                Converter.FromInt16(VBucketId.Value, buffer, HeaderOffsets.VBucket);//6-7
+                Converter.FromInt16(VBucketId.Value, span.Slice(HeaderOffsets.VBucket));//6-7
             }
 
-            Converter.FromInt32(framingExtras.Length + ExtrasLength + keyBytes.Length + BodyLength, buffer, HeaderOffsets.BodyLength);//8-11
-            Converter.FromUInt32(Opaque, buffer, HeaderOffsets.Opaque);//12-15
-            Converter.FromUInt64(Cas, buffer, HeaderOffsets.Cas);
+            Converter.FromInt32(framingExtras.Length + ExtrasLength + keyBytes.Length + BodyLength, span.Slice(HeaderOffsets.BodyLength));//8-11
+            Converter.FromUInt32(Opaque, span.Slice(HeaderOffsets.Opaque));//12-15
+            Converter.FromUInt64(Cas, span.Slice(HeaderOffsets.Cas));
         }
 
         public override byte[] CreateBody()
@@ -87,16 +90,17 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
                 var opcode = (byte)mutate.OpCode;
                 var flags = (byte) mutate.PathFlags;
                 var pathLength = Encoding.UTF8.GetByteCount(mutate.Path);
-                var fragment = mutate.Value == null ? new byte[0] : GetBytes(mutate);
+                var fragment = mutate.Value == null ? Array.Empty<byte>() : GetBytes(mutate);
 
-                var spec = new byte[pathLength + 8];
-                Converter.FromByte(opcode, spec, 0);
-                Converter.FromByte(flags, spec, 1);
-                Converter.FromUInt16((ushort)pathLength, spec, 2);
-                Converter.FromUInt32((uint)fragment.Length, spec, 4);
-                Converter.FromString(mutate.Path, spec, 8);
+                var spec = new Memory<byte>(new byte[pathLength + 8]);
+                var specSpan = spec.Span;
+                Converter.FromByte(opcode, specSpan);
+                Converter.FromByte(flags, specSpan.Slice(1));
+                Converter.FromUInt16((ushort)pathLength, specSpan.Slice(2));
+                Converter.FromUInt32((uint)fragment.Length, specSpan.Slice(4));
+                Converter.FromString(mutate.Path, specSpan.Slice(8));
 
-                buffer.AddRange(spec);
+                buffer.AddRange(MemoryMarshal.ToEnumerable<byte>(spec));
                 buffer.AddRange(fragment);
                 _lookupCommands.Add(mutate);
             }
@@ -170,17 +174,18 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
             var statusOffset = indexOffset + 1;
             var valueLengthOffset = indexOffset + 3;
             var valueOffset = indexOffset + 7;
+            var span = response.AsSpan();
 
             for (;;)
             {
-                var index = Converter.ToByte(response, indexOffset);
+                var index = Converter.ToByte(span.Slice( indexOffset));
                 var command = _lookupCommands[index];
-                command.Status = (ResponseStatus) Converter.ToUInt16(response, statusOffset);
+                command.Status = (ResponseStatus) Converter.ToUInt16(span.Slice(statusOffset));
 
                 //if succcess read value and loop to next result - otherwise terminate loop here
                 if (command.Status == ResponseStatus.Success)
                 {
-                    var valueLength = Converter.ToInt32(response, valueLengthOffset);
+                    var valueLength = Converter.ToInt32(span.Slice(valueLengthOffset));
                     if (valueLength > 0)
                     {
                         var payLoad = new byte[valueLength];
@@ -205,7 +210,7 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
         public override void WriteKey(byte[] buffer, int offset)
         {
-            Converter.FromString(Key, buffer, offset);
+            Converter.FromString(Key, buffer.AsSpan(offset));
         }
 
         public override void WriteBody(byte[] buffer, int offset)

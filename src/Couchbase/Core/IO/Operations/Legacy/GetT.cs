@@ -1,3 +1,5 @@
+using System;
+
 namespace Couchbase.Core.IO.Operations.Legacy
 {
     internal class GetT<T> : MutationOperationBase<T>
@@ -5,7 +7,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
         public override byte[] CreateExtras()
         {
             var extras = new byte[4];
-            Converter.FromUInt32(Expires, extras, 0);
+            Converter.FromUInt32(Expires, extras.AsSpan());
             return extras;
         }
 

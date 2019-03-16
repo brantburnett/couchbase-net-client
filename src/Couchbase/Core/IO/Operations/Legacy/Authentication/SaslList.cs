@@ -35,10 +35,11 @@ namespace Couchbase.Core.IO.Operations.Legacy.Authentication
         public override byte[] CreateHeader(byte[] extras, byte[] body, byte[] key, byte[] framingExtras)
         {
             var header = new byte[OperationHeader.Length];
+            var span = header.AsSpan();
 
-            Converter.FromByte((byte)Magic.Request, header, HeaderOffsets.Magic);
-            Converter.FromByte((byte)OpCode, header, HeaderOffsets.Opcode);
-            Converter.FromUInt32(Opaque, header, HeaderOffsets.Opaque);
+            Converter.FromByte((byte)Magic.Request, span.Slice(HeaderOffsets.Magic));
+            Converter.FromByte((byte)OpCode, span.Slice(HeaderOffsets.Opcode));
+            Converter.FromUInt32(Opaque, span.Slice(HeaderOffsets.Opaque));
 
             return header;
         }

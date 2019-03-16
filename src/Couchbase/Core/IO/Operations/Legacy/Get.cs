@@ -25,7 +25,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
             if (buffer.Length > Header.ExtrasOffset)
             {
                 var format = new byte();
-                var flags = Converter.ToByte(buffer, Header.ExtrasOffset);
+                var flags = Converter.ToByte(buffer.AsSpan(Header.ExtrasOffset));
                 Converter.SetBit(ref format, 0, Converter.GetBit(flags, 0));
                 Converter.SetBit(ref format, 1, Converter.GetBit(flags, 1));
                 Converter.SetBit(ref format, 2, Converter.GetBit(flags, 2));
@@ -36,7 +36,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
                 Converter.SetBit(ref compression, 5, Converter.GetBit(flags, 5));
                 Converter.SetBit(ref compression, 6, Converter.GetBit(flags, 6));
 
-                var typeCode = (TypeCode)(Converter.ToUInt16(buffer, 26) & 0xff);
+                var typeCode = (TypeCode)(Converter.ToUInt16(buffer.AsSpan(26)) & 0xff);
                 Format = (DataFormat)format;
                 Compression = (Compression)compression;
                 Flags.DataFormat = Format;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Couchbase.Utils;
 using Newtonsoft.Json;
 
@@ -11,10 +11,12 @@ namespace Couchbase.Core.IO.Operations.Legacy
         public override byte[] CreateBody()
         {
             var body = new byte[Content.Length * 2];
+            var span = body.AsSpan();
+
             for (var i = 0; i < Content.Length; i++)
             {
                 var offset = i * 2;
-                Converter.FromInt16(Content[i], body, offset);
+                Converter.FromInt16(Content[i], span.Slice(offset));
             }
 
             return body;
@@ -32,7 +34,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
             {
                 try
                 {
-                    var buffer = Data.ToArray();
+                    var buffer = Data.ToArray().AsSpan();
                     var offset = Header.BodyOffset;
                     result = new short[Header.BodyLength/2];
 
@@ -41,7 +43,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
                         var temp = offset + i * 2;
                         if (temp < buffer.Length)
                         {
-                            result[i] = Converter.ToInt16(buffer, temp);
+                            result[i] = Converter.ToInt16(buffer.Slice(temp));
                         }
                     }
                 }

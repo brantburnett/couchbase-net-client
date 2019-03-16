@@ -5,7 +5,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
         public override byte[] CreateExtras()
         {
             var extras = new byte[4];
-            Converter.FromUInt32(Expires, extras, 0);
+            Converter.FromUInt32(Expires, extras);
             return extras;
         }
 

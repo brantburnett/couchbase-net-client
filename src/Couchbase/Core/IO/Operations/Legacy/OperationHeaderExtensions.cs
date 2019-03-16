@@ -39,34 +39,36 @@ namespace Couchbase.Core.IO.Operations.Legacy
                 return new OperationHeader {Status = ResponseStatus.None};
             }
 
+            var span = buffer.AsSpan();
+
             int keyLength, framingExtrasLength;
-            var magic = (Magic) Converter.ToByte(buffer, HeaderOffsets.Magic);
+            var magic = (Magic) Converter.ToByte(span.Slice(HeaderOffsets.Magic));
             if (magic == Magic.AltResponse)
             {
-                framingExtrasLength = Converter.ToByte(buffer, HeaderOffsets.FramingExtras);
-                keyLength = Converter.ToByte(buffer, HeaderOffsets.AltKeyLength);
+                framingExtrasLength = Converter.ToByte(span.Slice(HeaderOffsets.FramingExtras));
+                keyLength = Converter.ToByte(span.Slice(HeaderOffsets.AltKeyLength));
             }
             else
             {
                 framingExtrasLength = 0;
-                keyLength = Converter.ToInt16(buffer, HeaderOffsets.KeyLength);
+                keyLength = Converter.ToInt16(span.Slice(HeaderOffsets.KeyLength));
             }
 
-            var statusCode = Converter.ToInt16(buffer, HeaderOffsets.Status);
+            var statusCode = Converter.ToInt16(span.Slice(HeaderOffsets.Status));
             var status = GetResponseStatus(statusCode, errorMap, out errorCode);
 
             return new OperationHeader
             {
                 Magic = (byte) magic,
-                OpCode = Converter.ToByte(buffer, HeaderOffsets.Opcode).ToOpCode(),
+                OpCode = Converter.ToByte(span.Slice(HeaderOffsets.Opcode)).ToOpCode(),
                 FramingExtrasLength = framingExtrasLength,
                 KeyLength = keyLength,
-                ExtrasLength = Converter.ToByte(buffer, HeaderOffsets.ExtrasLength),
-                DataType = (DataType) Converter.ToByte(buffer, HeaderOffsets.Datatype),
+                ExtrasLength = Converter.ToByte(span.Slice(HeaderOffsets.ExtrasLength)),
+                DataType = (DataType) Converter.ToByte(span.Slice(HeaderOffsets.Datatype)),
                 Status = status,
-                BodyLength = Converter.ToInt32(buffer, HeaderOffsets.Body),
-                Opaque = Converter.ToUInt32(buffer, HeaderOffsets.Opaque),
-                Cas = Converter.ToUInt64(buffer, HeaderOffsets.Cas)
+                BodyLength = Converter.ToInt32(span.Slice(HeaderOffsets.Body)),
+                Opaque = Converter.ToUInt32(span.Slice(HeaderOffsets.Opaque)),
+                Cas = Converter.ToUInt64(span.Slice(HeaderOffsets.Cas))
             };
         }
 
@@ -123,7 +125,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
             return GetServerDuration(bytes);
         }
 
-        internal static long? GetServerDuration(byte[] buffer)
+        internal static long? GetServerDuration(ReadOnlySpan<byte> buffer)
         {
             var offset = 0;
             while (offset < buffer.Length)
@@ -135,7 +137,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
                 if (type == ResponseFramingExtraType.ServerDuration)
                 {
                     // read encoded two byte server duration
-                    var encoded = Converter.ToUInt16(buffer, offset);
+                    var encoded = Converter.ToUInt16(buffer.Slice(offset));
                     if (encoded > 0)
                     {
                         // decode into microseconds

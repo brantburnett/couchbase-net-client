@@ -130,7 +130,7 @@ namespace Couchbase.Core.IO.Transcoders
         /// <exception cref="System.ArgumentOutOfRangeException"></exception>
         public virtual byte[] Encode<T>(T value, TypeCode typeCode, OpCode opcode)
         {
-            var bytes = new byte[] { };
+            Span<byte> bytes = new Span<byte>();
             switch (typeCode)
             {
                 case TypeCode.Empty:
@@ -139,37 +139,37 @@ namespace Couchbase.Core.IO.Transcoders
 #endif
                 case TypeCode.String:
                 case TypeCode.Char:
-                    Converter.FromString(Convert.ToString(value), ref bytes, 0);
+                    Converter.FromString(Convert.ToString(value), ref bytes);
                     break;
 
                 case TypeCode.Int16:
-                    Converter.FromInt16(Convert.ToInt16(value), ref bytes, 0, false);
+                    Converter.FromInt16(Convert.ToInt16(value), ref bytes, false);
                     break;
 
                 case TypeCode.UInt16:
-                    Converter.FromUInt16(Convert.ToUInt16(value), ref bytes, 0, false);
+                    Converter.FromUInt16(Convert.ToUInt16(value), ref bytes, false);
                     break;
 
                 case TypeCode.Int32:
-                    Converter.FromInt32(Convert.ToInt32(value), ref bytes, 0, false);
+                    Converter.FromInt32(Convert.ToInt32(value), ref bytes, false);
                     break;
 
                 case TypeCode.UInt32:
-                    Converter.FromUInt32(Convert.ToUInt32(value), ref bytes, 0, false);
+                    Converter.FromUInt32(Convert.ToUInt32(value), ref bytes, false);
                     break;
 
                 case TypeCode.Int64:
-                    Converter.FromInt64(Convert.ToInt64(value), ref bytes, 0, false);
+                    Converter.FromInt64(Convert.ToInt64(value), ref bytes, false);
                     break;
 
                 case TypeCode.UInt64:
                     if (opcode == OpCode.Increment || opcode == OpCode.Decrement)
                     {
-                        Converter.FromUInt64(Convert.ToUInt64(value), ref bytes, 0, true);
+                        Converter.FromUInt64(Convert.ToUInt64(value), ref bytes, true);
                     }
                     else
                     {
-                        Converter.FromUInt64(Convert.ToUInt64(value), ref bytes, 0, false);
+                        Converter.FromUInt64(Convert.ToUInt64(value), ref bytes, false);
                     }
                     break;
 
@@ -187,7 +187,7 @@ namespace Couchbase.Core.IO.Transcoders
                 default:
                     throw new ArgumentOutOfRangeException();
             }
-            return bytes;
+            return bytes.ToArray();
         }
 
         /// <summary>
@@ -291,35 +291,35 @@ namespace Couchbase.Core.IO.Transcoders
                 case TypeCode.Int16:
                     if (length > 0)
                     {
-                        value = Converter.ToInt16(buffer, offset, false);
+                        value = Converter.ToInt16(buffer.AsSpan(offset), false);
                     }
                     break;
 
                 case TypeCode.UInt16:
                     if (length > 0)
                     {
-                        value = Converter.ToUInt16(buffer, offset, false);
+                        value = Converter.ToUInt16(buffer.AsSpan(offset), false);
                     }
                     break;
 
                 case TypeCode.Int32:
                     if (length > 0)
                     {
-                        value = Converter.ToInt32(buffer, offset, false);
+                        value = Converter.ToInt32(buffer.AsSpan(offset), false);
                     }
                     break;
 
                 case TypeCode.UInt32:
                     if (length > 0)
                     {
-                        value = Converter.ToUInt32(buffer, offset, false);
+                        value = Converter.ToUInt32(buffer.AsSpan(offset), false);
                     }
                     break;
 
                 case TypeCode.Int64:
                     if (length > 0)
                     {
-                        value = Converter.ToInt64(buffer, offset, false);
+                        value = Converter.ToInt64(buffer.AsSpan(offset), false);
                     }
                     break;
 
@@ -328,11 +328,11 @@ namespace Couchbase.Core.IO.Transcoders
                     {
                         if (opcode == OpCode.Increment || opcode == OpCode.Decrement)
                         {
-                            value = Converter.ToUInt64(buffer, offset, true);
+                            value = Converter.ToUInt64(buffer.AsSpan(offset), true);
                         }
                         else
                         {
-                            value = Converter.ToUInt64(buffer, offset, false);
+                            value = Converter.ToUInt64(buffer.AsSpan(offset), false);
                         }
                     }
                     break;

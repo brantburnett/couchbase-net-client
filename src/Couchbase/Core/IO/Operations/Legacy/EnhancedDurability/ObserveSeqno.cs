@@ -18,19 +18,20 @@ namespace Couchbase.Core.IO.Operations.Legacy.EnhancedDurability
         /// <returns></returns>
         public override byte[] Write()
         {
-            var body = new byte[8];
-            Converter.FromInt64(MutationToken.VBucketUuid, body, 0);
+            Span<byte> body = stackalloc byte[8];
+            Converter.FromInt64(MutationToken.VBucketUuid, body);
 
-            var header = new byte[OperationHeader.Length];
-            Converter.FromByte((byte)Magic.Request, header, HeaderOffsets.Magic);
-            Converter.FromByte((byte)OpCode, header, HeaderOffsets.Opcode);
-            Converter.FromInt16(MutationToken.VBucketId, header, HeaderOffsets.VBucket);
-            Converter.FromInt32(body.Length, header, HeaderOffsets.BodyLength);
-            Converter.FromUInt32(Opaque, header, HeaderOffsets.Opaque);
+            Span<byte> header = stackalloc byte[OperationHeader.Length];
+            Converter.FromByte((byte)Magic.Request, header.Slice(HeaderOffsets.Magic));
+            Converter.FromByte((byte)OpCode, header.Slice(HeaderOffsets.Opcode));
+            Converter.FromInt16(MutationToken.VBucketId, header.Slice(HeaderOffsets.VBucket));
+            Converter.FromInt32(body.Length, header.Slice(HeaderOffsets.BodyLength));
+            Converter.FromUInt32(Opaque, header.Slice(HeaderOffsets.Opaque));
 
             var buffer = new byte[body.Length + header.Length];
-            System.Buffer.BlockCopy(header, 0, buffer, 0, header.Length);
-            System.Buffer.BlockCopy(body, 0, buffer, header.Length, body.Length);
+            var bufferSpan = buffer.AsSpan();
+            header.CopyTo(bufferSpan);
+            body.CopyTo(bufferSpan.Slice(header.Length));
             return buffer;
         }
 
@@ -45,21 +46,20 @@ namespace Couchbase.Core.IO.Operations.Legacy.EnhancedDurability
             {
                 try
                 {
-                    var buffer = Data.ToArray();
-                    var offset = Header.BodyOffset;
+                    var buffer = Data.ToArray().AsSpan().Slice(Header.BodyOffset);
 
-                    var isHardFailover = Converter.ToByte(buffer, offset) == 1;
+                    var isHardFailover = Converter.ToByte(buffer) == 1;
                     if (isHardFailover)
                     {
                         result = new ObserveSeqnoResponse
                         {
                             IsHardFailover = true,
-                            VBucketId = Converter.ToInt16(buffer, offset + 1),
-                            VBucketUuid = Converter.ToInt64(buffer, offset + 3),
-                            LastPersistedSeqno = Converter.ToInt64(buffer, offset + 11),
-                            CurrentSeqno = Converter.ToInt64(buffer, offset + 19),
-                            OldVBucketUuid = Converter.ToInt64(buffer, offset + 27),
-                            LastSeqnoReceived = Converter.ToInt64(buffer, offset + 35)
+                            VBucketId = Converter.ToInt16(buffer.Slice(1)),
+                            VBucketUuid = Converter.ToInt64(buffer.Slice(3)),
+                            LastPersistedSeqno = Converter.ToInt64(buffer.Slice(11)),
+                            CurrentSeqno = Converter.ToInt64(buffer.Slice(19)),
+                            OldVBucketUuid = Converter.ToInt64(buffer.Slice(27)),
+                            LastSeqnoReceived = Converter.ToInt64(buffer.Slice(35))
                         };
                     }
                     else
@@ -67,10 +67,10 @@ namespace Couchbase.Core.IO.Operations.Legacy.EnhancedDurability
                         result = new ObserveSeqnoResponse
                         {
                             IsHardFailover = false,
-                            VBucketId = Converter.ToInt16(buffer, offset + 1),
-                            VBucketUuid = Converter.ToInt64(buffer, offset + 3),
-                            LastPersistedSeqno = Converter.ToInt64(buffer, offset + 11),
-                            CurrentSeqno = Converter.ToInt64(buffer, offset + 19),
+                            VBucketId = Converter.ToInt16(buffer.Slice(1)),
+                            VBucketUuid = Converter.ToInt64(buffer.Slice(3)),
+                            LastPersistedSeqno = Converter.ToInt64(buffer.Slice(11)),
+                            CurrentSeqno = Converter.ToInt64(buffer.Slice(19)),
                         };
                     }
                 }

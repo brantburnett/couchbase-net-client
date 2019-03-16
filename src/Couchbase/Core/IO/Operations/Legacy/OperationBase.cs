@@ -124,30 +124,31 @@ namespace Couchbase.Core.IO.Operations.Legacy
         {
             var header = new byte[OperationHeader.Length];
             var totalLength = extras.GetLengthSafe() + key.GetLengthSafe() + body.GetLengthSafe() + framingExtras.GetLengthSafe();
+            var span = header.AsSpan();
 
             if (framingExtras.GetLengthSafe() > 0)
             {
-                Converter.FromByte((byte) Magic.AltRequest, header, HeaderOffsets.Magic);
-                Converter.FromByte((byte) framingExtras.GetLengthSafe(), header, HeaderOffsets.KeyLength);
-                Converter.FromByte((byte) key.GetLengthSafe(), header, HeaderOffsets.AltKeyLength);
+                Converter.FromByte((byte) Magic.AltRequest, span.Slice(HeaderOffsets.Magic));
+                Converter.FromByte((byte) framingExtras.GetLengthSafe(), span.Slice(HeaderOffsets.KeyLength));
+                Converter.FromByte((byte) key.GetLengthSafe(), span.Slice(HeaderOffsets.AltKeyLength));
             }
             else
             {
-                Converter.FromByte((byte) Magic.Request, header, HeaderOffsets.Magic);
-                Converter.FromInt16((short) key.GetLengthSafe(), header, HeaderOffsets.KeyLength);
+                Converter.FromByte((byte) Magic.Request, span.Slice(HeaderOffsets.Magic));
+                Converter.FromInt16((short) key.GetLengthSafe(), span.Slice(HeaderOffsets.KeyLength));
             }
 
-            Converter.FromByte((byte)OpCode, header, HeaderOffsets.Opcode);
-            Converter.FromByte((byte)extras.GetLengthSafe(), header, HeaderOffsets.ExtrasLength);
+            Converter.FromByte((byte)OpCode, span.Slice(HeaderOffsets.Opcode));
+            Converter.FromByte((byte)extras.GetLengthSafe(), span.Slice(HeaderOffsets.ExtrasLength));
 
             if (VBucketId.HasValue)
             {
-                Converter.FromInt16(VBucketId.Value, header, HeaderOffsets.VBucket);
+                Converter.FromInt16(VBucketId.Value, span.Slice(HeaderOffsets.VBucket));
             }
 
-            Converter.FromInt32(totalLength, header, HeaderOffsets.BodyLength);
-            Converter.FromUInt32(Opaque, header, HeaderOffsets.Opaque);
-            Converter.FromUInt64(Cas, header, HeaderOffsets.Cas);
+            Converter.FromInt32(totalLength, span.Slice(HeaderOffsets.BodyLength));
+            Converter.FromUInt32(Opaque, span.Slice(HeaderOffsets.Opaque));
+            Converter.FromUInt64(Cas, span.Slice(HeaderOffsets.Cas));
 
             return header;
         }
@@ -157,7 +158,7 @@ namespace Couchbase.Core.IO.Operations.Legacy
             if (buffer.Length > Header.ExtrasOffset)
             {
                 var format = new byte();
-                var flags = Converter.ToByte(buffer, Header.ExtrasOffset);
+                var flags = Converter.ToByte(buffer.AsSpan(Header.ExtrasOffset));
                 Converter.SetBit(ref format, 0, Converter.GetBit(flags, 0));
                 Converter.SetBit(ref format, 1, Converter.GetBit(flags, 1));
                 Converter.SetBit(ref format, 2, Converter.GetBit(flags, 2));
@@ -168,13 +169,13 @@ namespace Couchbase.Core.IO.Operations.Legacy
                 Converter.SetBit(ref compression, 5, Converter.GetBit(flags, 5));
                 Converter.SetBit(ref compression, 6, Converter.GetBit(flags, 6));
 
-                var typeCode = (TypeCode)(Converter.ToUInt16(buffer, 26) & 0xff);
+                var typeCode = (TypeCode)(Converter.ToUInt16(buffer.AsSpan(26)) & 0xff);
                 Format = (DataFormat)format;
                 Compression = (Compression) compression;
                 Flags.DataFormat = Format;
                 Flags.Compression = Compression;
                 Flags.TypeCode = typeCode;
-                Expires = Converter.ToUInt32(buffer, 25);
+                Expires = Converter.ToUInt32(buffer.AsSpan(25));
             }
         }
 
@@ -192,11 +193,11 @@ namespace Couchbase.Core.IO.Operations.Legacy
             {
                 var leb128Bytes = Leb128.Write(Cid.Value);
                 Buffer.BlockCopy(leb128Bytes, 0, buffer, 0, leb128Bytes.Length);
-                Converter.FromString(Key, buffer, leb128Bytes.Length);
+                Converter.FromString(Key, buffer.AsSpan(leb128Bytes.Length));
             }
             else
             {
-                Converter.FromString(Key, buffer, 0);
+                Converter.FromString(Key, buffer);
             }
             return buffer;
         }
@@ -380,11 +381,11 @@ namespace Couchbase.Core.IO.Operations.Legacy
                 var buffer = Data.ToArray();
                 if (buffer.Length > 0 && TotalLength == OperationHeader.Length)
                 {
-                    body = Converter.ToString(buffer, 0, buffer.Length);
+                    body = Converter.ToString(buffer);
                 }
                 else
                 {
-                    body = Converter.ToString(buffer, OperationHeader.Length, Math.Min(buffer.Length - OperationHeader.Length, TotalLength - OperationHeader.Length));
+                    body = Converter.ToString(buffer.AsSpan(OperationHeader.Length, Math.Min(buffer.Length - OperationHeader.Length, TotalLength - OperationHeader.Length)));
                 }
             }
 
@@ -487,8 +488,8 @@ namespace Couchbase.Core.IO.Operations.Legacy
         {
             if (buffer.Length >= 40 && VBucketId.HasValue)
             {
-                var uuid = Converter.ToInt64(buffer, Header.ExtrasOffset);
-                var seqno = Converter.ToInt64(buffer, Header.ExtrasOffset + 8);
+                var uuid = Converter.ToInt64(buffer.AsSpan(Header.ExtrasOffset));
+                var seqno = Converter.ToInt64(buffer.AsSpan(Header.ExtrasOffset + 8));
                 MutationToken = new MutationToken(BucketName, VBucketId.Value, uuid, seqno);
             }
         }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Net;
 using System.Threading;
@@ -31,7 +31,7 @@ namespace Couchbase.Core.IO
             Timer?.Dispose();
 
             var response = new byte[24];
-            Converter.FromUInt32(Opaque, response, HeaderOffsets.Opaque);
+            Converter.FromUInt32(Opaque, response.AsSpan(HeaderOffsets.Opaque));
 
             Callback(new SocketAsyncState
             {
@@ -56,14 +56,14 @@ namespace Couchbase.Core.IO
             Timer?.Dispose();
 
             //defaults
-            var status = (ResponseStatus) Converter.ToInt16(response, HeaderOffsets.Status);
+            var status = (ResponseStatus) Converter.ToInt16(response.AsSpan(HeaderOffsets.Status));
             Exception e = null;
 
             //this means the request never completed - assume a transport failure
             if (response == null)
             {
                 response = new byte[24];
-                Converter.FromUInt32(Opaque, response, HeaderOffsets.Opaque);
+                Converter.FromUInt32(Opaque, response.AsSpan(HeaderOffsets.Opaque));
                 e = new Exception("SendTimeoutException");
                 status = ResponseStatus.TransportFailure;
             }

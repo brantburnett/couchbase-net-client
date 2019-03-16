@@ -1,4 +1,6 @@
-﻿
+
+using System;
+
 namespace Couchbase.Core.IO.Operations.Legacy
 {
     internal sealed class Decrement : MutationOperationBase<ulong>
@@ -12,9 +14,10 @@ namespace Couchbase.Core.IO.Operations.Legacy
         public override byte[] CreateExtras()
         {
             var extras = new byte[20];
-            Converter.FromUInt64(Delta, extras, 0);
-            Converter.FromUInt64(Initial, extras, 8);
-            Converter.FromUInt32(Expires, extras, 16);
+            var span = extras.AsSpan();
+            Converter.FromUInt64(Delta, span);
+            Converter.FromUInt64(Initial, span.Slice(8));
+            Converter.FromUInt32(Expires, span.Slice(16));
             return extras;
         }
 

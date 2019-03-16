@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Text;
 using Couchbase.Core.IO.Operations.SubDocument;
@@ -142,12 +142,12 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
         public override void WriteKey(byte[] buffer, int offset)
         {
-            Converter.FromString(Key, buffer, offset);
+            Converter.FromString(Key, buffer.AsSpan(offset));
         }
 
         public override void WritePath(byte[] buffer, int offset)
         {
-            Converter.FromString(Path, buffer, offset);
+            Converter.FromString(Path, buffer.AsSpan(offset));
         }
 
         public override void WriteBody(byte[] buffer, int offset)

@@ -80,7 +80,7 @@ namespace Couchbase.Core.IO.Connections
 
         public Task SendAsync(byte[] request, Func<SocketAsyncState, Task> callback, ErrorMap errorMap)
         {
-            var opaque = Converter.ToUInt32(request, HeaderOffsets.Opaque);
+            var opaque = Converter.ToUInt32(request.AsSpan(HeaderOffsets.Opaque));
             var state = new AsyncState
             {
                 Opaque = opaque,
@@ -181,10 +181,10 @@ namespace Couchbase.Core.IO.Connections
             var parsedOffset = 0;
             while (parsedOffset + HeaderOffsets.BodyLength < _receiveBufferLength)
             {
-                var responseSize = Converter.ToInt32(_receiveBuffer, parsedOffset + HeaderOffsets.BodyLength) + 24;
+                var responseSize = Converter.ToInt32(_receiveBuffer.AsSpan( parsedOffset + HeaderOffsets.BodyLength)) + 24;
                 if (parsedOffset + responseSize > _receiveBufferLength) break;
 
-                var opaque = Converter.ToUInt32(_receiveBuffer, parsedOffset + HeaderOffsets.Opaque);
+                var opaque = Converter.ToUInt32(_receiveBuffer.AsSpan(parsedOffset + HeaderOffsets.Opaque));
                 var response = new byte[responseSize];
                 Buffer.BlockCopy(_receiveBuffer, parsedOffset, response, 0, responseSize);
 

@@ -1,622 +1,324 @@
-﻿using System;
+using System;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text;
+using Newtonsoft.Json;
 
 namespace Couchbase.Core.IO.Converters
 {
-   /// <summary>
+    /// <summary>
     /// The default <see cref="IByteConverter" /> for for converting types and arrays before
     /// being sent or after being received across the network. Unless an overload is called
     /// with useNbo = false, Network Byte Order will be used in the conversion.
     /// </summary>
     public sealed class DefaultConverter : IByteConverter
     {
-        static byte[] CopyAndReverse(byte[] src, int offset, int length)
+        private static T Read<T>(ReadOnlySpan<byte> src, bool useNbo)
+            where T: struct
         {
-            var dst = new byte[length];
-            for (var i = dst.Length; i > 0; i--)
+            if (!useNbo)
             {
-                dst[i - 1] = src[offset++];
+                return MemoryMarshal.Read<T>(src);
             }
-            return dst;
+            else
+            {
+                Span<byte> dst = stackalloc byte[Unsafe.SizeOf<T>()];
+
+                var offset = 0;
+                for (var i = dst.Length - 1; i >= 0; i--)
+                {
+                    dst[i] = src[offset++];
+                }
+
+                return MemoryMarshal.Read<T>(dst);
+            }
         }
 
-        static void CopyAndReverse(byte[] src, ref byte[] dst, int offset, int length)
+        private static void Write<T>(T value, Span<byte> dst, bool useNbo)
+            where T: struct
         {
             if (dst.Length == 0)
             {
-                dst = new byte[length];
+                dst = new Span<byte>(new byte[Unsafe.SizeOf<T>()]);
             }
-            for (var i = src.Length; i > 0; i--)
-            {
-                dst[offset++] = src[i - 1];
-            }
-        }
 
-        /// <summary>
-        /// Reads a <see cref="bool" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">if set to <c>true</c> [use nbo].</param>
-        /// <returns></returns>
-        public bool ToBoolean(byte[] buffer, int offset, bool useNbo)
-        {
             if (useNbo)
             {
-                const int length = 1;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToBoolean(array, 0);
-            }
-            return BitConverter.ToBoolean(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="float" /> from a buffer starting from a given offset..
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">if set to <c>true</c> [use nbo].</param>
-        /// <returns></returns>
-        public float ToSingle(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 4;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToSingle(array, 0);
-            }
-            return BitConverter.ToSingle(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="DateTime" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">if set to <c>true</c> [use nbo].</param>
-        /// <returns></returns>
-        /// <exception cref="System.NotImplementedException"></exception>
-        public DateTime ToDateTime(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 8;
-                var array = CopyAndReverse(buffer, offset, length);
-                return DateTime.FromBinary(BitConverter.ToInt64(array, 0));
-            }
-            return DateTime.FromBinary(BitConverter.ToInt64(buffer, offset));
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Double" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">if set to <c>true</c> [use nbo].</param>
-        /// <returns></returns>
-        public double ToDouble(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 8;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToDouble(array, 0);
-            }
-            return BitConverter.ToDouble(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Byte" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public byte ToByte(byte[] buffer, int offset)
-        {
-            return buffer[offset];
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Int16" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public short ToInt16(byte[] buffer, int offset)
-        {
-            return ToInt16(buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Int16" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <returns></returns>
-        public short ToInt16(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 2;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToInt16(array, 0);
-            }
-            return BitConverter.ToInt16(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="UInt16" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public ushort ToUInt16(byte[] buffer, int offset)
-        {
-            return ToUInt16(buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="UInt16" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <returns></returns>
-        public ushort ToUInt16(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 2;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToUInt16(array, 0);
-            }
-            return BitConverter.ToUInt16(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Int32" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public int ToInt32(byte[] buffer, int offset)
-        {
-            return ToInt32(buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Int32" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <returns></returns>
-        public int ToInt32(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 4;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToInt32(array, 0);
-            }
-            return BitConverter.ToInt32(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="UInt32" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public uint ToUInt32(byte[] buffer, int offset)
-        {
-            return ToUInt32(buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="UInt32" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <returns></returns>
-        public uint ToUInt32(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 4;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToUInt32(array, 0);
-            }
-            return BitConverter.ToUInt32(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Int64" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public long ToInt64(byte[] buffer, int offset)
-        {
-            const int length = 8;
-            var array = CopyAndReverse(buffer, offset, length);
-            return BitConverter.ToInt64(array, 0);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="Int64" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <returns></returns>
-        public long ToInt64(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 8;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToInt64(array, 0);
-            }
-            return BitConverter.ToInt64(buffer, offset);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="UInt64" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <returns></returns>
-        public ulong ToUInt64(byte[] buffer, int offset)
-        {
-            return ToUInt64(buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Reads a <see cref="UInt64" /> from a buffer starting from a given offset.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <returns></returns>
-        public ulong ToUInt64(byte[] buffer, int offset, bool useNbo)
-        {
-            if (useNbo)
-            {
-                const int length = 8;
-                var array = CopyAndReverse(buffer, offset, length);
-                return BitConverter.ToUInt64(array, 0);
-            }
-            return BitConverter.ToUInt64(buffer, offset);
-        }
-
-        /// <summary>
-        /// Returns a <see cref="System.String" /> that represents this instance.
-        /// </summary>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="length">The length.</param>
-        /// <returns>
-        /// A <see cref="System.String" /> that represents this instance.
-        /// </returns>
-        public string ToString(byte[] buffer, int offset, int length)
-        {
-            return Encoding.UTF8.GetString(buffer, offset, length);
-        }
-
-        /// <summary>
-        /// Writes a <see cref="Int16" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt16(short value, ref byte[] buffer, int offset, bool useNbo)
-        {
-            const int length = 2;
-            var src = BitConverter.GetBytes(value);
-            if (useNbo)
-            {
-                CopyAndReverse(src, ref buffer, offset, length);
+                WriteAndReverse(value, dst);
             }
             else
             {
-                buffer = new byte[length];
-                Buffer.BlockCopy(src, 0, buffer, offset, length);
+                MemoryMarshal.Write(dst, ref value);
             }
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int16" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt16(short value, ref byte[] buffer, int offset)
+        private static void WriteAndReverse<T>(T value, Span<byte> dst)
+            where T: struct
         {
-            FromInt16(value, ref buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Writes a <see cref="Int16" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt16(short value, byte[] buffer, int offset)
-        {
-            FromInt16(value, ref buffer, offset, true);
-        }
-
-        /// <summary>
-        /// Writes a <see cref="UInt16" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt16(ushort value, ref byte[] buffer, int offset, bool useNbo)
-        {
-            const int length = 2;
-            var src = BitConverter.GetBytes(value);
-            if (useNbo)
+            Span<byte> buffer = stackalloc byte[Unsafe.SizeOf<T>()];
+            MemoryMarshal.Write(dst, ref value);
+            
+            var offset = 0;
+            for (var i = buffer.Length - 1; i >= 0; i--)
             {
-                CopyAndReverse(src, ref buffer, offset, length);
+                dst[offset++] = buffer[i];
             }
-            else
+        }
+
+        /// <inheritdoc />
+        public bool ToBoolean(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<bool>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public float ToSingle(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<float>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public DateTime ToDateTime(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return DateTime.FromBinary(Read<long>(buffer, useNbo));
+        }
+
+        /// <inheritdoc />
+        public double ToDouble(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<double>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public byte ToByte(ReadOnlySpan<byte> buffer)
+        {
+            return buffer[0];
+        }
+
+        /// <inheritdoc />
+        public short ToInt16(ReadOnlySpan<byte> buffer)
+        {
+            return ToInt16(buffer, true);
+        }
+
+        /// <inheritdoc />
+        public short ToInt16(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<short>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public ushort ToUInt16(ReadOnlySpan<byte> buffer)
+        {
+            return ToUInt16(buffer, true);
+        }
+
+        /// <inheritdoc />
+        public ushort ToUInt16(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<ushort>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public int ToInt32(ReadOnlySpan<byte> buffer)
+        {
+            return ToInt32(buffer, true);
+        }
+
+        /// <inheritdoc />
+        public int ToInt32(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<int>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public uint ToUInt32(ReadOnlySpan<byte> buffer)
+        {
+            return ToUInt32(buffer, true);
+        }
+
+        /// <inheritdoc />
+        public uint ToUInt32(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<uint>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public long ToInt64(ReadOnlySpan<byte> buffer)
+        {
+            return ToInt64(buffer, true);
+        }
+
+        /// <inheritdoc />
+        public long ToInt64(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<long>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public ulong ToUInt64(ReadOnlySpan<byte> buffer)
+        {
+            return ToUInt64(buffer, true);
+        }
+
+        /// <inheritdoc />
+        public ulong ToUInt64(ReadOnlySpan<byte> buffer, bool useNbo)
+        {
+            return Read<ulong>(buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public unsafe string ToString(ReadOnlySpan<byte> buffer)
+        {
+            fixed (byte* ptr = &MemoryMarshal.GetReference(buffer))
             {
-                buffer = new byte[length];
-                Buffer.BlockCopy(src, 0, buffer, offset, length);
+                return Encoding.UTF8.GetString(ptr, buffer.Length);
             }
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt16" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt16(ushort value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromInt16(short value, ref Span<byte> buffer, bool useNbo)
         {
-            FromUInt16(value, ref buffer, offset, true);
+            Write(value, buffer, useNbo);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt16" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt16(ushort value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromInt16(short value, ref Span<byte> buffer)
         {
-            FromUInt16(value, ref buffer, offset);
+            FromInt16(value, ref buffer, true);
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int32" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        public void FromInt32(int value, ref byte[] buffer, int offset, bool useNbo)
+        /// <inheritdoc />
+        public void FromInt16(short value, Span<byte> buffer)
         {
-            const int length = 4;
-            var src = BitConverter.GetBytes(value);
-            if (useNbo)
-            {
-                CopyAndReverse(src, ref buffer, offset, length);
-            }
-            else
-            {
-                buffer = new byte[length];
-                Buffer.BlockCopy(src, 0, buffer, offset, length);
-            }
+            FromInt16(value, ref buffer, true);
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int32" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt32(int value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromUInt16(ushort value, ref Span<byte> buffer, bool useNbo)
         {
-            FromInt32(value, ref buffer, offset, true);
+            Write(value, buffer, useNbo);
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int32" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt32(int value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromUInt16(ushort value, ref Span<byte> buffer)
         {
-            FromInt32(value, ref buffer, offset);
+            FromUInt16(value, ref buffer, true);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt32" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt32(uint value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromUInt16(ushort value, Span<byte> buffer)
         {
-            FromUInt32(value, ref buffer, offset);
+            FromUInt16(value, ref buffer);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt32" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt32(uint value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromInt32(int value, ref Span<byte> buffer, bool useNbo)
         {
-            FromUInt32(value, ref buffer, offset, true);
+            Write(value, buffer, useNbo);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt32" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        public void FromUInt32(uint value, ref byte[] buffer, int offset, bool useNbo)
+        /// <inheritdoc />
+        public void FromInt32(int value, ref Span<byte> buffer)
         {
-            const int length = 4;
-            var src = BitConverter.GetBytes(value);
-            if (useNbo)
-            {
-                CopyAndReverse(src, ref buffer, offset, length);
-            }
-            else
-            {
-                buffer = new byte[length];
-                Buffer.BlockCopy(src, 0, buffer, offset, length);
-            }
+            FromInt32(value, ref buffer, true);
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int64" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        public void FromInt64(long value, ref byte[] buffer, int offset, bool useNbo)
+        /// <inheritdoc />
+        public void FromInt32(int value, Span<byte> buffer)
         {
-            const int length = 8;
-            var src = BitConverter.GetBytes(value);
-            if (useNbo)
-            {
-                CopyAndReverse(src, ref buffer, offset, length);
-            }
-            else
-            {
-                buffer = new byte[length];
-                Buffer.BlockCopy(src, 0, buffer, offset, length);
-            }
+            FromInt32(value, ref buffer);
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int64" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt64(long value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromUInt32(uint value, Span<byte> buffer)
         {
-            FromInt64(value, ref buffer, offset, true);
+            FromUInt32(value, ref buffer);
         }
 
-        /// <summary>
-        /// Writes a <see cref="Int64" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromInt64(long value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromUInt32(uint value, ref Span<byte> buffer)
         {
-            FromInt64(value, ref buffer, offset);
+            FromUInt32(value, ref buffer, true);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt64" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        /// <param name="useNbo">If <c>true</c> will make most significant byte first.</param>
-        public void FromUInt64(ulong value, ref byte[] buffer, int offset, bool useNbo)
+        /// <inheritdoc />
+        public void FromUInt32(uint value, ref Span<byte> buffer, bool useNbo)
         {
-            const int length = 8;
-            var src = BitConverter.GetBytes(value);
-            if (useNbo)
-            {
-                CopyAndReverse(src, ref buffer, offset, length);
-            }
-            else
-            {
-                buffer = new byte[length];
-                Buffer.BlockCopy(src, 0, buffer, offset, length);
-            }
+            Write(value, buffer, useNbo);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt64" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt64(ulong value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromInt64(long value, ref Span<byte> buffer, bool useNbo)
         {
-            FromUInt64(value, ref buffer, offset, true);
+            Write(value, buffer, useNbo);
         }
 
-        /// <summary>
-        /// Writes a <see cref="UInt64" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromUInt64(ulong value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromInt64(long value, ref Span<byte> buffer)
         {
-            FromUInt64(value, ref buffer, offset);
+            FromInt64(value, ref buffer, true);
         }
 
-        /// <summary>
-        /// Writes a <see cref="string"/> to a dst at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The dst.</param>
-        /// <param name="offset">The offset.</param>
-        /// <remarks>Will resize dst if empty.</remarks>
-        public void FromString(string value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromInt64(long value, Span<byte> buffer)
+        {
+            FromInt64(value, ref buffer);
+        }
+
+        /// <inheritdoc />
+        public void FromUInt64(ulong value, ref Span<byte> buffer, bool useNbo)
+        {
+            Write(value, buffer, useNbo);
+        }
+
+        /// <inheritdoc />
+        public void FromUInt64(ulong value, ref Span<byte> buffer)
+        {
+            FromUInt64(value, ref buffer, true);
+        }
+
+        /// <inheritdoc />
+        public void FromUInt64(ulong value, Span<byte> buffer)
+        {
+            FromUInt64(value, ref buffer);
+        }
+
+        /// <inheritdoc />
+        public unsafe void FromString(string value, ref Span<byte> buffer)
         {
             if (buffer.Length == 0)
             {
                 buffer = new byte[Encoding.UTF8.GetByteCount(value)];
             }
-            Encoding.UTF8.GetBytes(value, 0, value.Length, buffer, offset);
+
+            var charSpan = value.AsSpan();
+
+            fixed (byte* bytes = &MemoryMarshal.GetReference(buffer))
+            {
+                fixed (char* chars = &MemoryMarshal.GetReference(charSpan))
+                {
+                    Encoding.UTF8.GetBytes(chars, charSpan.Length, bytes, buffer.Length);
+                }
+            }
         }
 
-        /// <summary>
-        /// Writes a <see cref="string"/> to a dst at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The dst.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromString(string value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromString(string value, Span<byte> buffer)
         {
-            FromString(value, ref buffer, offset);
+            FromString(value, ref buffer);
         }
 
-        /// <summary>
-        /// Writes a <see cref="byte" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromByte(byte value, ref byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromByte(byte value, ref Span<byte> buffer)
         {
-            buffer[offset] = value;
+            buffer[0] = value;
         }
 
-        /// <summary>
-        /// Writes a <see cref="byte" /> to a buffer starting at a given offset.
-        /// </summary>
-        /// <param name="value">The value.</param>
-        /// <param name="buffer">The buffer.</param>
-        /// <param name="offset">The offset.</param>
-        public void FromByte(byte value, byte[] buffer, int offset)
+        /// <inheritdoc />
+        public void FromByte(byte value, Span<byte> buffer)
         {
-            FromByte(value, ref buffer, offset);
+            FromByte(value, ref buffer);
         }
 
         /// <summary>

@@ -36,8 +36,8 @@ namespace Couchbase.Core.IO.Operations.Legacy
             var bytes = new byte[2];
 
             var framingExtra = new FramingExtraInfo(RequestFramingExtraType.DurabilityRequirements, (byte) (bytes.Length - 1));
-            Converter.FromByte(framingExtra.Byte, bytes, 0);
-            Converter.FromByte((byte) DurabilityLevel, bytes, 1);
+            Converter.FromByte(framingExtra.Byte, bytes);
+            Converter.FromByte((byte) DurabilityLevel, bytes.AsSpan(1));
 
             // TODO: improve timeout, coerce to 1500ms, etc
             //var timeout = DurabilityTimeout.HasValue ? DurabilityTimeout.Value.TotalMilliseconds : 0;

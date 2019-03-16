@@ -106,8 +106,8 @@ namespace Couchbase.Core.IO.Operations.Legacy
             Converter.SetBit(ref extras[0], 7, Converter.GetBit(compression, 2));
 
             var typeCode = (ushort)Flags.TypeCode;
-            Converter.FromUInt16(typeCode, extras, 2);
-            Converter.FromUInt32(Expires, extras, 4);
+            Converter.FromUInt16(typeCode, extras.AsSpan(2));
+            Converter.FromUInt32(Expires, extras.AsSpan(4));
 
             return extras;
         }

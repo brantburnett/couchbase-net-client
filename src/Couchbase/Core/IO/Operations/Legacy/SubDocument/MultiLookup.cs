@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using Couchbase.Core.IO.Operations.SubDocument;
 using Couchbase.Utils;
@@ -25,20 +26,22 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
         public override void WriteHeader(byte[] buffer)
         {
+            var span = buffer.AsSpan();
+
             var keyBytes = CreateKey();
-            Converter.FromByte((byte)Magic.Request, buffer, HeaderOffsets.Magic);//0
-            Converter.FromByte((byte)OpCode, buffer, HeaderOffsets.Opcode);//1
-            Converter.FromInt16((short)keyBytes.Length, buffer, HeaderOffsets.KeyLength);//2-3
-            Converter.FromByte((byte)ExtrasLength, buffer, HeaderOffsets.ExtrasLength);  //4
+            Converter.FromByte((byte)Magic.Request, span.Slice(HeaderOffsets.Magic));//0
+            Converter.FromByte((byte)OpCode, span.Slice(HeaderOffsets.Opcode));//1
+            Converter.FromInt16((short)keyBytes.Length, span.Slice(HeaderOffsets.KeyLength));//2-3
+            Converter.FromByte((byte)ExtrasLength, span.Slice(HeaderOffsets.ExtrasLength));  //4
             //5 datatype?
             if (VBucketId.HasValue)
             {
-                Converter.FromInt16((short)VBucketId, buffer, HeaderOffsets.VBucket);//6-7
+                Converter.FromInt16((short)VBucketId, span.Slice(HeaderOffsets.VBucket));//6-7
             }
 
-            Converter.FromInt32(ExtrasLength + keyBytes.Length + BodyLength, buffer, HeaderOffsets.BodyLength);//8-11
-            Converter.FromUInt32(Opaque, buffer, HeaderOffsets.Opaque);//12-15
-            Converter.FromUInt64(Cas, buffer, HeaderOffsets.Cas);
+            Converter.FromInt32(ExtrasLength + keyBytes.Length + BodyLength, span.Slice(HeaderOffsets.BodyLength));//8-11
+            Converter.FromUInt32(Opaque, span.Slice(HeaderOffsets.Opaque));//12-15
+            Converter.FromUInt64(Cas, span.Slice(HeaderOffsets.Cas));
         }
 
         public override byte[] CreateBody()
@@ -50,13 +53,14 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
                 var flags = (byte) lookup.PathFlags;
                 var pathLength = Encoding.UTF8.GetByteCount(lookup.Path);
 
-                var spec = new byte[pathLength + 4];
-                Converter.FromByte(opcode, spec, 0);
-                Converter.FromByte(flags, spec, 1);
-                Converter.FromUInt16((ushort) pathLength, spec, 2);
-                Converter.FromString(lookup.Path, spec, 4);
+                var spec = new Memory<byte>(new byte[pathLength + 4]);
+                var specSpan = spec.Span;
+                Converter.FromByte(opcode, specSpan);
+                Converter.FromByte(flags, specSpan.Slice(1));
+                Converter.FromUInt16((ushort) pathLength, specSpan.Slice(2));
+                Converter.FromString(lookup.Path, specSpan.Slice(4));
 
-                buffer.AddRange(spec);
+                buffer.AddRange(MemoryMarshal.ToEnumerable<byte>(spec));
                 LookupCommands.Add(lookup);
             }
             return buffer.ToArray();
@@ -64,7 +68,7 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
         public override void WriteKey(byte[] buffer, int offset)
         {
-            Converter.FromString(Key, buffer, offset);
+            Converter.FromString(Key, buffer.AsSpan(offset));
         }
 
         public override void WriteBody(byte[] buffer, int offset)
@@ -84,12 +88,12 @@ namespace Couchbase.Core.IO.Operations.Legacy.SubDocument
 
             for (;;)
             {
-                var bodyLength = Converter.ToInt32(response, valueLengthOffset);
+                var bodyLength = Converter.ToInt32(response.AsSpan(valueLengthOffset));
                 var payLoad = new byte[bodyLength];
                 System.Buffer.BlockCopy(response, valueOffset, payLoad, 0, bodyLength);
 
                 var command = LookupCommands[commandIndex++];
-                command.Status = (ResponseStatus)Converter.ToUInt16(response, statusOffset);
+                command.Status = (ResponseStatus)Converter.ToUInt16(response.AsSpan(statusOffset));
                 command.ValueIsJson = payLoad.IsJson(0, bodyLength - 1);
                 command.Bytes = payLoad;
 
