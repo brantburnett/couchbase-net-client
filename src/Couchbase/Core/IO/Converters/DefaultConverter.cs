@@ -56,7 +56,7 @@ namespace Couchbase.Core.IO.Converters
             where T: struct
         {
             Span<byte> buffer = stackalloc byte[Unsafe.SizeOf<T>()];
-            MemoryMarshal.Write(dst, ref value);
+            MemoryMarshal.Write(buffer, ref value);
             
             var offset = 0;
             for (var i = buffer.Length - 1; i >= 0; i--)
